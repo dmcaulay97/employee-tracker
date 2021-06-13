@@ -68,7 +68,168 @@ const init = () => {
         })
 }
 
+//Change this so that only managers of role's department come up as manager option;
 const add = (choice) => {
+    if (choice == 'Employee') {
+        const managers = ['none (This employee is a manager)'];
+        const roles = [];
+        connection.query('select title from roles;',
+            (err, res) => {
+                if (err) throw err;
+                res.forEach(e => {
+                    roles.push(e.title);
+                })
+                inquirer.prompt([
+                    {
+                        name: 'f_name',
+                        type: 'input',
+                        message: "Enter employee's first name:"
+                    },
+                    {
+                        name: 'l_name',
+                        type: 'input',
+                        message: "Enter employee's last name:"
+                    },
+                    {
+                        name: 'role',
+                        type: 'list',
+                        message: "Pick employee's role:",
+                        choices: roles
+                    },
+                ])
+                    .then(({ f_name, l_name, role }) => {
+                        console.log(role);
+                        connection.query(`
+                        select 
+                        d.name
+                        from roles r
+                        join departments d on r.department_id = d.id
+                        where r.title = "${role}"; `,
+                            (err, res) => {
+                                if (err) throw err;
+                                console.log(res);
+                                connection.query(`
+                                select 
+                                e.first_name, 
+                                e.last_name 
+                                from employee e 
+                                join roles r on e.role_id = r.id 
+                                join departments d on r.department_id = d.id
+                                where manager_id is null and d.name = '${res[0].name}';`,
+                                    (err, response) => {
+                                        if (err) throw err;
+                                        response.forEach(e => {
+                                            const first = e.first_name.replace(' ', '*');
+                                            const last = e.last_name.replace(' ', '*');
+                                            managers.push(`${first} ${last}`);
+                                        })
+                                        inquirer.prompt(
+                                            {
+                                                name: 'manager',
+                                                type: 'list',
+                                                message: "Pick employee's manager:",
+                                                choices: managers
+                                            })
+                                            .then(({ manager }) => {
+                                                if (manager == 'none (This employee is a manager)') {
+                                                    connection.query(`select id from roles where title = "${role}";`,
+                                                        (err, response) => {
+                                                            if (err) throw err;
+                                                            connection.query('insert into employee (first_name, last_name, role_id) values (?, ?, ?)', [f_name, l_name, response[0].id],
+                                                                (err, res) => {
+                                                                    if (err) throw err;
+                                                                    console.log("New employee added!")
+                                                                    init();
+                                                                })
+                                                        })
+
+                                                } else {
+                                                    manager_name = manager.split(' ');
+                                                    const first = manager_name[0].replace('*', ' ')
+                                                    const last = manager_name[1].replace('*', ' ')
+                                                    connection.query(`
+                                                select 
+                                                e.id as manager_id    
+                                                from employee e join roles r on e.role_id = r.id
+                                                where e.first_name = '${first}' and e.last_name = '${last}'`,
+                                                        (err, res) => {
+                                                            if (err) throw err;
+                                                            connection.query(`select id from roles where title = "${role}";`,
+                                                                (err, response) => {
+                                                                    if (err) throw err
+                                                                    connection.query(`insert into employee (first_name, last_name, role_id, manager_id) values ('${f_name}', '${l_name}', ${response[0].id}, ${res[0].manager_id})`,
+                                                                        (err, res) => {
+                                                                            if (err) throw err;
+                                                                            console.log("New employee added!")
+                                                                            init();
+                                                                        })
+                                                                }
+
+                                                            )
+
+                                                        }
+                                                    )
+                                                }
+
+                                            })
+                                    })
+                            }
+                        )
+                    })
+            })
+    } else if (choice == 'Role') {
+        const departments = [];
+        connection.query('select name from departments',
+            (err, res) => {
+                if (err) throw err;
+                res.forEach(e => {
+                    departments.push(e.name);
+                })
+                inquirer.prompt([
+                    {
+                        type: "input",
+                        name: "title",
+                        message: "Enter new role's title:"
+                    },
+                    {
+                        type: "number",
+                        name: "salary",
+                        message: "Enter the salary for this role"
+                    },
+                    {
+                        type: "list",
+                        name: "department",
+                        message: "Pick the department that this role belongs to:",
+                        choices: departments
+                    }
+                ])
+                    .then(({ title, salary, department }) => {
+                        connection.query(`select id from departments where name = '${department}'`,
+                            (err, res) => {
+                                if (err) throw err;
+                                connection.query(`insert into roles (title, salary, department_id) values(?, ?, ?)`, [title, salary, res[0].id],
+                                    (err, res) => {
+                                        if (err) throw err;
+                                        console.log("New role added!")
+                                        init();
+                                    })
+                            })
+                    })
+
+            })
+
+    } else {
+        inquirer.prompt({ type: "input", name: "name", message: "Enter the name of the new department:" })
+            .then(({ name }) => {
+                connection.query(`insert into departments (name) values (?)`, [name],
+                    (err, res) => {
+                        if (err) throw err;
+                        console.log("New department added");
+                        init();
+                    })
+            })
+
+    }
 
 }
 

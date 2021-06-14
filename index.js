@@ -1,6 +1,7 @@
 const mysql = require('mysql');
 const inquirer = require('inquirer');
 
+//Creating constents that will be used for the terminal display
 const space = ' '
 const dash = '-'
 
@@ -12,6 +13,7 @@ const connection = mysql.createConnection({
     database: 'employee_tracker_db'
 });
 
+//This function controls the options menu for the command line application and is the first thing to run after the connection to the database is started
 const init = () => {
     inquirer.prompt({
         name: 'action',
@@ -68,9 +70,10 @@ const init = () => {
         })
 }
 
-
+//The add function controls the functionality for adding emplyees, roles and departments, it takes in a perameter whickh determines what is being added.
 const add = (choice) => {
     if (choice == 'Employee') {
+        //We use arrays to store and display all possible manager and role choices.
         const managers = ['none (This employee is a manager)'];
         const roles = [];
         connection.query('select title from roles;',
@@ -125,6 +128,7 @@ const add = (choice) => {
                                             const last = e.last_name.replace(' ', '*');
                                             managers.push(`${first} ${last}`);
                                         })
+                                        //User is presented with managers that belong to the selected department (department is determined by role)
                                         inquirer.prompt(
                                             {
                                                 name: 'manager',
@@ -236,9 +240,10 @@ const add = (choice) => {
     }
 
 }
-
+//Update function controls updating an employees role. The user also chooses the emplyees new manager (or no manager if they are a manager themself) based on their new department.
 const update = (choice) => {
     if (choice == "Employee's role") {
+        //Objects are used to stpre possible employee, role, and later manager choices and their corrisponding id's. This method should be implimented in the add function (the add function does not currently use objects to store value: id pairs, it uses queries to connect names to id's. This process increases the number of queries and amount of code) to reduce on the number of queries required.
         const employees = {};
         const roles = {};
         connection.query(`select id, first_name, last_name from employee`,
@@ -277,7 +282,7 @@ const update = (choice) => {
                                         if (err) throw err;
                                         console.log("Employee's role changed!")
                                         const managers = {};
-                                        connection.query(`select d.id from departments d join roles r on r.department_id = d.id where r.id = 2;`,
+                                        connection.query(`select d.id from departments d join roles r on r.department_id = d.id where r.id =?;`, [role_id],
                                             (err, res) => {
                                                 if (err) throw err;
                                                 const department_id = res[0].id;
@@ -292,12 +297,17 @@ const update = (choice) => {
                                                         response.forEach(e => {
                                                             const name = `${e.first_name} ${e.last_name}`
                                                             managers[name] = e.id;
+
                                                         })
+                                                        const manager_choices = Object.keys(managers);
+                                                        console.log(manager_choices);
+                                                        manager_choices.push("none (This employee is a manager)");
+                                                        console.log(manager_choices);
                                                         inquirer.prompt({
-                                                            type: 'list', name: 'manager', message: "Choose employee's new manager:", choices: Object.keys(managers)
+                                                            type: 'list', name: 'manager', message: "Choose employee's new manager:", choices: manager_choices
                                                         })
                                                             .then(({ manager }) => {
-                                                                if (manager = "none (This employee is a manager)") {
+                                                                if (manager == "none (This employee is a manager)") {
                                                                     connection.query(`update employee set manager_id = null where id =?`, [emp_id],
                                                                         (err, res) => {
                                                                             if (err) throw err;
@@ -306,7 +316,7 @@ const update = (choice) => {
                                                                         })
                                                                 } else {
                                                                     const manager_id = managers[manager];
-                                                                    ; connection.query(`update employee set manager_id =? where id =? `, [manager_id, emp_id],
+                                                                    connection.query(`update employee set manager_id =? where id =? `, [manager_id, emp_id],
                                                                         (err, res) => {
                                                                             if (err) throw err;
                                                                             console.log("Manager changed!")
@@ -326,6 +336,7 @@ const update = (choice) => {
     }
 }
 
+//The view function joins tables to display all relevent columns and uses the display functions to create a user firendly display.
 const view = (choice) => {
     if (choice == 'Employees') {
         connection.query(`
@@ -372,7 +383,7 @@ const view = (choice) => {
     }
 }
 
-
+//The display funcitons all work in the same way. They first account for the largest(longest) member of each column and then create a table using dashes and spaces to display thet data.
 const employeeDisplay = (array) => {
     let id = 2;
     let first = 10;
@@ -444,6 +455,7 @@ const departmentDisplay = (array) => {
     console.log(display);
 }
 
+//The .connect method established the connection to the database.
 connection.connect((err) => {
     if (err) throw err;
     console.log(`

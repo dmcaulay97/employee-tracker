@@ -53,7 +53,7 @@ const init = () => {
                     name: 'choice',
                     type: 'list',
                     message: 'What do you want to update?',
-                    choices: ['Department', 'Role', 'Employee', 'Back']
+                    choices: ["Employee's role", 'Back']
                 })
                     .then(({ choice }) => {
                         if (choice == 'Back') {
@@ -68,7 +68,7 @@ const init = () => {
         })
 }
 
-//Change this so that only managers of role's department come up as manager option;
+
 const add = (choice) => {
     if (choice == 'Employee') {
         const managers = ['none (This employee is a manager)'];
@@ -79,6 +79,7 @@ const add = (choice) => {
                 res.forEach(e => {
                     roles.push(e.title);
                 })
+                roles.sort();
                 inquirer.prompt([
                     {
                         name: 'f_name',
@@ -98,13 +99,14 @@ const add = (choice) => {
                     },
                 ])
                     .then(({ f_name, l_name, role }) => {
-                        console.log(role);
+                        f_name = f_name.trim();
+                        l_name = l_name.trim();
                         connection.query(`
                         select 
                         d.name
                         from roles r
                         join departments d on r.department_id = d.id
-                        where r.title = "${role}"; `,
+                        where r.title =?; `, [role],
                             (err, res) => {
                                 if (err) throw err;
                                 console.log(res);
@@ -115,7 +117,7 @@ const add = (choice) => {
                                 from employee e 
                                 join roles r on e.role_id = r.id 
                                 join departments d on r.department_id = d.id
-                                where manager_id is null and d.name = '${res[0].name}';`,
+                                where manager_id is null and d.name =? ;`, [res[0].name],
                                     (err, response) => {
                                         if (err) throw err;
                                         response.forEach(e => {
@@ -132,7 +134,7 @@ const add = (choice) => {
                                             })
                                             .then(({ manager }) => {
                                                 if (manager == 'none (This employee is a manager)') {
-                                                    connection.query(`select id from roles where title = "${role}";`,
+                                                    connection.query(`select id from roles where title =?;`, [role],
                                                         (err, response) => {
                                                             if (err) throw err;
                                                             connection.query('insert into employee (first_name, last_name, role_id) values (?, ?, ?)', [f_name, l_name, response[0].id],
@@ -151,13 +153,13 @@ const add = (choice) => {
                                                 select 
                                                 e.id as manager_id    
                                                 from employee e join roles r on e.role_id = r.id
-                                                where e.first_name = '${first}' and e.last_name = '${last}'`,
+                                                where e.first_name =? and e.last_name =?`, [first, last],
                                                         (err, res) => {
                                                             if (err) throw err;
-                                                            connection.query(`select id from roles where title = "${role}";`,
+                                                            connection.query(`select id from roles where title =?;`, [role],
                                                                 (err, response) => {
                                                                     if (err) throw err
-                                                                    connection.query(`insert into employee (first_name, last_name, role_id, manager_id) values ('${f_name}', '${l_name}', ${response[0].id}, ${res[0].manager_id})`,
+                                                                    connection.query(`insert into employee (first_name, last_name, role_id, manager_id) values (?,?,?,?)`, [f_name, l_name, response[0].id, res[0].manager_id],
                                                                         (err, res) => {
                                                                             if (err) throw err;
                                                                             console.log("New employee added!")
@@ -204,7 +206,8 @@ const add = (choice) => {
                     }
                 ])
                     .then(({ title, salary, department }) => {
-                        connection.query(`select id from departments where name = '${department}'`,
+                        title = title.trim();
+                        connection.query(`select id from departments where name = ?`, [department],
                             (err, res) => {
                                 if (err) throw err;
                                 connection.query(`insert into roles (title, salary, department_id) values(?, ?, ?)`, [title, salary, res[0].id],
@@ -221,6 +224,7 @@ const add = (choice) => {
     } else {
         inquirer.prompt({ type: "input", name: "name", message: "Enter the name of the new department:" })
             .then(({ name }) => {
+                name = name.trim();
                 connection.query(`insert into departments (name) values (?)`, [name],
                     (err, res) => {
                         if (err) throw err;
@@ -231,6 +235,95 @@ const add = (choice) => {
 
     }
 
+}
+
+const update = (choice) => {
+    if (choice == "Employee's role") {
+        const employees = {};
+        const roles = {};
+        connection.query(`select id, first_name, last_name from employee`,
+            (err, res) => {
+                if (err) throw err;
+                res.forEach(e => {
+                    const name = `${e.first_name} ${e.last_name}`;
+                    const id = e.id;
+                    employees[name] = id;
+                })
+                connection.query(`select title, id from roles`,
+                    (err, response) => {
+                        if (err) throw err;
+                        response.forEach(e => {
+                            roles[e.title] = e.id;
+                        })
+                        inquirer.prompt([
+                            {
+                                type: "list",
+                                name: 'name',
+                                message: "Choose employee you want to update:",
+                                choices: Object.keys(employees).sort()
+                            },
+                            {
+                                type: "list",
+                                name: 'role',
+                                message: "Choose employee's new role:",
+                                choices: Object.keys(roles).sort()
+                            }
+                        ])
+                            .then(({ name, role }) => {
+                                const emp_id = employees[name];
+                                const role_id = roles[role]
+                                connection.query(`update employee set role_id =? where id = ?`, [role_id, emp_id],
+                                    (err, res) => {
+                                        if (err) throw err;
+                                        console.log("Employee's role changed!")
+                                        const managers = {};
+                                        connection.query(`select d.id from departments d join roles r on r.department_id = d.id where r.id = 2;`,
+                                            (err, res) => {
+                                                if (err) throw err;
+                                                const department_id = res[0].id;
+                                                connection.query(`
+                                                select e.id, e.first_name, e.last_name
+                                                from employee e 
+                                                join roles r on e.role_id = r.id
+                                                join departments d on r.department_id = d.id
+                                                where manager_id is null and d.id =?;`, [department_id],
+                                                    (err, response) => {
+                                                        if (err) throw err;
+                                                        response.forEach(e => {
+                                                            const name = `${e.first_name} ${e.last_name}`
+                                                            managers[name] = e.id;
+                                                        })
+                                                        inquirer.prompt({
+                                                            type: 'list', name: 'manager', message: "Choose employee's new manager:", choices: Object.keys(managers)
+                                                        })
+                                                            .then(({ manager }) => {
+                                                                if (manager = "none (This employee is a manager)") {
+                                                                    connection.query(`update employee set manager_id = null where id =?`, [emp_id],
+                                                                        (err, res) => {
+                                                                            if (err) throw err;
+                                                                            console.log("Manager changed!")
+                                                                            init();
+                                                                        })
+                                                                } else {
+                                                                    const manager_id = managers[manager];
+                                                                    ; connection.query(`update employee set manager_id =? where id =? `, [manager_id, emp_id],
+                                                                        (err, res) => {
+                                                                            if (err) throw err;
+                                                                            console.log("Manager changed!")
+                                                                            init();
+                                                                        })
+                                                                }
+
+                                                            })
+                                                    })
+                                            })
+
+                                    })
+                            })
+                    })
+
+            })
+    }
 }
 
 const view = (choice) => {
@@ -279,9 +372,6 @@ const view = (choice) => {
     }
 }
 
-const update = (choice) => {
-
-}
 
 const employeeDisplay = (array) => {
     let id = 2;
